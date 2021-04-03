@@ -1,12 +1,16 @@
-type w32_process = {
+interface process {
    name:      string;
    id:        number;
    threads:   number;
    parent_id: number;
    priority:  number;
-   path?:     string;
-};
+}
 
-declare function w32_list_all(): w32_process[];
+interface process_with_path extends process {
+   path?: string;
+}
 
-export default w32_list_all;
+declare function process_list(with_paths: false): process[];
+declare function process_list(with_paths: true): process_with_path[];
+
+export = process_list;

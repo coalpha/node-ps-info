@@ -1,10 +1,13 @@
 {
-   "name": "@coalpha/native-node-module",
-   "version": "0.0.1",
+   "name": "@coalpha/process-list",
+   "version": "0.1.0",
    "author": "coalpha",
    "main": "build/Release/lib.node",
    "types": "lib.d.ts",
    "gypfile": true,
+   "scripts": {
+      "install": "node-gyp rebuild"
+   },
    "devDependencies": {
       "node-gyp": "^7.1.2"
    }

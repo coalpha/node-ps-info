@@ -1,7 +1,6 @@
 {
    "targets": [{
       "target_name": "lib",
-
       "sources": ["lib.c"],
 
       # I'm pretty sure this does nothing but whatever
