@@ -4,7 +4,7 @@ else
 	gyp_cache := ${HOME}/.cache/node-gyp
 endif
 
-node_include := $(word 1,$(wildcard $(gyp_cache)/*/))/include/node
+node_include := $(word 1,$(wildcard $(gyp_cache)/*/))include/node
 
 init: compile_flags.txt package-lock.json
 	-

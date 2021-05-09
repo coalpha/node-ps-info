@@ -1,13 +1,13 @@
-# node-process-list
+# @coalpha/ps-list
 
 ![](misc/icon.png)
 
-*List all open processes really fast.*
+*Efficiently list open processes in Node*
 
 ## usage
 
 ```js
-const process_list = require("@coalpha/process-list");
+const ps_list = require("@coalpha/ps-list");
 
-process_list().forEach(process => console.log(process.name));
+ps_list().forEach(process => console.log(process.name));
 ```
