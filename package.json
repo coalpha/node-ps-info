@@ -1,8 +1,8 @@
 {
-   "name": "@coalpha/process-list",
+   "name": "@coalpha/ps-list",
    "version": "0.1.0",
    "author": "coalpha",
-   "main": "build/Release/lib.node",
+   "main": "build/Release/ps-list.node",
    "types": "lib.d.ts",
    "gypfile": true,
    "scripts": {

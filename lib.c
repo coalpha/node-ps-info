@@ -12,7 +12,7 @@
 #endif
 
 napi_value init_all(napi_env const env, napi_value exports) {
-   if (napi_create_function(env, fn_name, NAPI_AUTO_LENGTH, process_list, NULL, &exports) != napi_ok) {
+   if (napi_create_function(env, "ps-list", NAPI_AUTO_LENGTH, ps_list, NULL, &exports) != napi_ok) {
       napi_throw_error(env, "ENOCREATE", "Could not export process_list!");
       return NULL;
    }

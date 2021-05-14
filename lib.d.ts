@@ -11,6 +11,6 @@ interface process_with_path extends process {
 }
 
 declare function process_list(with_paths: false): process[];
-declare function process_list(with_paths: true): process_with_path[];
+declare function process_list(with_paths: true ): process_with_path[];
 
 export = process_list;

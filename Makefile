@@ -18,11 +18,14 @@ compile_flags.txt:
 package-lock.json: package.json
 	npm i
 
-src := lib.c
+src := $(wildcard *.c)
 bin := $(shell node -e "console.log(require('./package.json').main)")
 
 $(bin): $(src)
 	npx node-gyp rebuild
+
+build: $(bin)
+	-
 
 print: $(bin)
 	node -e "console.log(require('./$<')())"
