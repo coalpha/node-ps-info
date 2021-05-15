@@ -1,6 +1,6 @@
 {
    "targets": [{
-      "target_name": "ps-list",
+      "target_name": "ps_list",
       "sources": ["lib.c"],
 
       # I'm pretty sure this does nothing but whatever

@@ -1,6 +1,7 @@
 #include "lib.h"
 
 #define _POSIX_C_SOURCE 200809L
+#include <stdlib.h> // malloc
 #include <stdint.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -19,6 +20,24 @@
 #endif
 static char proc_path[LEN(S_PROC_PATH) + LEN(S_MAX_PID) + 1] = "/proc/";
 
+char *path_buf;
+
+napi_value init_all(napi_env const env, napi_value exports) {
+   path_buf = malloc(PATH_MAX);
+
+   if (path_buf == NULL) {
+      napi_throw_error(env, "ENOMEM", "Allocating PATH_MAX bytes failed!");
+      return NULL;
+   }
+
+   if (napi_create_function(env, "ps_list", sizeof("ps_list"), ps_list, NULL, &exports) != napi_ok) {
+      napi_throw_error(env, "ENOCREATE", "Could not export ps_list!");
+      return NULL;
+   }
+
+   return exports;
+}
+
 napi_value ps_list(napi_env const restrict env, napi_callback_info const restrict info) {
    (void) info;
 
@@ -36,22 +55,20 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
 
    size_t ary_idx = 0;
    napi_value obj;
+   napi_value val;
 
-   napi_value id;
-   napi_value name;
-   napi_value path;
-   napi_value status;
-   napi_value ppid_n;
    struct dirent *restrict dirent;
    while ((dirent = readdir(proc))) {
       if (napi_create_object(env, &obj) != napi_ok) {
          return ary;
       }
 
-      // simultaniously check if the directory is a PID, copy it into the
-      // proc_path, and parse it's name as a u32.
-      uint32_t pid = 0;
+      // pid
       {
+         uint32_t pid = 0;
+
+         // simultaniously check if the directory is a PID, copy it into the
+         // proc_path, and parse it's name as a u32.
          char *c = dirent->d_name;
          char *proc_path6 = proc_path + 6;
          while (*c) {
@@ -64,14 +81,14 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
             *proc_path6++ = *c++;
          }
          *proc_path6 = '\0';
-      }
 
-      if (napi_create_uint32(env, pid, &id) != napi_ok) {
-         return ary;
-      }
+         if (napi_create_uint32(env, pid, &val) != napi_ok) {
+            return ary;
+         }
 
-      if (napi_set_named_property(env, obj, "id", id) != napi_ok) {
-         return ary;
+         if (napi_set_named_property(env, obj, "id", val) != napi_ok) {
+            return ary;
+         }
       }
 
       DIR *const restrict cur_dir = opendir(proc_path);
@@ -138,7 +155,6 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
             goto die_statfd;
          }
          stat_buf_end = stat_buf + bytes_read;
-         *stat_buf_end = '\0';
       }
 
       // manually inlined function
@@ -156,51 +172,53 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
       }
       goto *return_address;
 
-      // nothing here is run
-
       // 02 comm
-      comm: {
-         if (stat_cursor[0] == '(') {
+      {
+         comm:
+         //if (stat_cursor[0] == '(') {
             stat_cursor++;
-         } else {
-            // this should never be the case
-            goto die_statfd;
-         }
+         //} else {
+            //goto die_statfd;
+         //}
 
          size_t comm_len = 0;
          while (stat_cursor[comm_len] != ')') comm_len++;
 
-         // (init)
+         if (napi_create_string_utf8(env, stat_cursor, comm_len, &val) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "name", val) != napi_ok) {
+            goto die_statfd;
+         }
+
+         // (init) S
          //  ^   ^
          //  ^   stat_cursor + comm_len
          //  stat_cursor
 
-         if (napi_create_string_utf8(env, stat_cursor, comm_len, &name) != napi_ok) {
-            goto die_statfd;
-         }
-
-         if (napi_set_named_property(env, obj, "name", name) != napi_ok) {
-            goto die_statfd;
-         }
-
+         // first go to closing paren, then jump twice to land on status
          stat_cursor += comm_len + LEN(") ");
       }
 
-      // 03 status
-      if (napi_create_string_utf8(env, stat_cursor, 1, &status) != napi_ok) {
-         goto die_statfd;
+      // 03 state
+      {
+         if (napi_create_string_utf8(env, stat_cursor, 1, &val) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "state", val) != napi_ok) {
+            goto die_statfd;
+         }
+
+         // (init) S 1
+         //        ^
+         //        stat_cursor
+
+         // increment twice to land on ppid
+         stat_cursor += LEN("S ");
       }
 
-      if (napi_set_named_property(env, obj, "status", status) != napi_ok) {
-         goto die_statfd;
-      }
-
-      // (init) S 1
-      //        ^
-      //        stat_cursor
-
-      // increment twice to land on ppid
-      stat_cursor += 2;
 
       // 04 ppid
       {
@@ -211,17 +229,17 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
             ppid += *stat_cursor - '0';
             stat_cursor++;
          }
+         // cursor is currently on space, increment once to land on pgrp
+         stat_cursor += LEN(" ");
 
-         if (napi_create_uint32(env, ppid, &ppid_n) != napi_ok) {
+         if (napi_create_uint32(env, ppid, &val) != napi_ok) {
             goto die_statfd;
          }
 
-         if (napi_set_named_property(env, obj, "ppid", ppid_n) != napi_ok) {
+         if (napi_set_named_property(env, obj, "ppid", val) != napi_ok) {
             goto die_statfd;
          }
       }
-
-      stat_cursor++;
 
       // 05 pgrp
       // 06 session
@@ -254,17 +272,17 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
             stat_cursor++;
          }
 
-         if (napi_create_int32(env, priority, &ppid_n) != napi_ok) {
+         // cursor is currently on space, increment once to get to nice
+         stat_cursor += LEN(" ");
+
+         if (napi_create_int32(env, priority, &val) != napi_ok) {
             goto die_statfd;
          }
 
-         if (napi_set_named_property(env, obj, "priority", ppid_n) != napi_ok) {
+         if (napi_set_named_property(env, obj, "priority", val) != napi_ok) {
             goto die_statfd;
          }
       }
-
-      // cursor is currently on space
-      stat_cursor++;
 
       // 19 nice
       return_address = &&num_threads;
@@ -280,27 +298,26 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
             stat_cursor++;
          }
 
-         if (napi_create_int32(env, threads, &ppid_n) != napi_ok) {
+         if (napi_create_int32(env, threads, &val) != napi_ok) {
             goto die_statfd;
          }
 
-         if (napi_set_named_property(env, obj, "threads", ppid_n) != napi_ok) {
+         if (napi_set_named_property(env, obj, "threads", val) != napi_ok) {
             goto die_statfd;
          }
       }
 
-      char exe_path[PATH_MAX];
-      ssize_t len = readlinkat(cur_dirfd, "exe", exe_path, PATH_MAX);
+      ssize_t len = readlinkat(cur_dirfd, "exe", path_buf, PATH_MAX);
       if (len == -1) {
          goto die_statfd;
       }
-      exe_path[len] = '\0';
+      path_buf[len] = '\0';
 
-      if (napi_create_string_utf8(env, exe_path, len, &path) != napi_ok) {
+      if (napi_create_string_utf8(env, path_buf, len, &val) != napi_ok) {
          goto die_statfd;
       }
 
-      if (napi_set_named_property(env, obj, "path", path) != napi_ok) {
+      if (napi_set_named_property(env, obj, "path", val) != napi_ok) {
          goto die_statfd;
       }
 
@@ -312,9 +329,8 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
       die_cur_dir:
       closedir(cur_dir);
 
-      next_dirent:
-      (void) 0;
-   };
+      next_dirent:;
+   }
 
    return ary;
 }

@@ -1,4 +1,4 @@
-# @coalpha/ps-list
+# @coalpha/ps_list
 
 ![](misc/icon.png)
 
@@ -7,7 +7,7 @@
 ## usage
 
 ```js
-const ps_list = require("@coalpha/ps-list");
+const ps_list = require("@coalpha/ps_list");
 
 ps_list().forEach(process => console.log(process.name));
 ```

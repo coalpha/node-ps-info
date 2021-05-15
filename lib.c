@@ -8,15 +8,7 @@
 #elif defined __linux__
 #include "linux.c"
 #else
-#error "@coalpha/ps-list: Unrecognized platform!"
+#error "@coalpha/ps_list: Unrecognized platform!"
 #endif
 
-napi_value init_all(napi_env const env, napi_value exports) {
-   if (napi_create_function(env, "ps-list", NAPI_AUTO_LENGTH, ps_list, NULL, &exports) != napi_ok) {
-      napi_throw_error(env, "ENOCREATE", "Could not export process_list!");
-      return NULL;
-   }
-   return exports;
-}
-
-NAPI_MODULE(process_list, init_all)
+NAPI_MODULE(ps_list, init_all)

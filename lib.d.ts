@@ -1,9 +1,17 @@
 interface process {
-   name:      string;
-   id:        number;
-   threads:   number;
-   parent_id: number;
-   priority:  number;
+   /** process id */
+   pid: number;
+   /** executable or process name */
+   name: string;
+   /** parent process id */
+   ppid: number;
+
+   /** state of process */
+   state: string
+   /** number of threads */
+   threads: number;
+   /** priority */
+   priority: number;
 }
 
 interface process_with_path extends process {
