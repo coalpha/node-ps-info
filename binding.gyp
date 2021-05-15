@@ -7,7 +7,7 @@
       "conditions":[
          [ "OS=='win'"
          , {"cflags_cc": ["/O2", "/Ot", "/EHc", "/Wall", "/utf-8"]}
-         , {"cflags": ["-O2", "-Werror", "-Wextra"]}
+         , {"cflags": ["-O2", "-Wall", "-Wextra"]}
          ]
       ]
    }]

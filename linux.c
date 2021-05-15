@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <limits.h> // PATH_MAX
 #include <fcntl.h>  // openat
-#include <stdio.h>
 
 #define LEN(s) sizeof(s) - 1
 #define S_PROC_PATH "/proc/"
@@ -41,6 +40,8 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
    napi_value id;
    napi_value name;
    napi_value path;
+   napi_value status;
+   napi_value ppid_n;
    struct dirent *restrict dirent;
    while ((dirent = readdir(proc))) {
       if (napi_create_object(env, &obj) != napi_ok) {
@@ -119,63 +120,173 @@ napi_value ps_list(napi_env const restrict env, napi_callback_info const restric
          + LEN(" ")
          + LEN(S_U32_MAX)  // 15 stime
          + LEN(" ")
-         + LEN(S_U32_MAX)  // 16 cutime
+         + LEN(S_I32_MAX)  // 16 cutime
          + LEN(" ")
-         + LEN(S_U32_MAX)  // 17 cstime
+         + LEN(S_I32_MAX)  // 17 cstime
          + LEN(" ")
-         + LEN(S_U32_MAX)  // 18 priority
+         + LEN(S_I32_MAX)  // 18 priority
          + LEN(" ")
-         + LEN(S_U32_MAX)  // 19 nice
+         + LEN(S_I32_MAX)  // 19 nice
          + LEN(" ")
-         + LEN(S_U32_MAX)  // 20 num_threads
-         + LEN("\0")
+         + LEN(S_I32_MAX)  // 20 num_threads
       ];
 
-      char const *const stat_buf_end = stat_buf + sizeof(stat_buf);
-
-      if (read(statfd, stat_buf, sizeof(stat_buf)) == -1) {
-         goto die_statfd;
+      char *stat_buf_end;
+      {
+         ssize_t bytes_read = read(statfd, stat_buf, sizeof(stat_buf) - 1);
+         if (bytes_read == -1) {
+            goto die_statfd;
+         }
+         stat_buf_end = stat_buf + bytes_read;
+         *stat_buf_end = '\0';
       }
 
       // manually inlined function
       // to invoke, set delim and return_address
       // result is stored in peek_count
       char const *stat_cursor = stat_buf;
-      char delim = ' ';
       void *return_address = &&comm;
-      peek:
-      (void) 0;
-      size_t peek_count = 0;
-      while (stat_cursor[peek_count] != delim) {
-         if (stat_cursor + peek_count == stat_buf_end) {
+      next_word:;
+      while (*stat_cursor++ != ' ') {
+         if (stat_cursor == stat_buf_end) {
             // you're not supposed to do that
             napi_throw_error(env, "EMEM", "stat_cursor == stat_buf_end");
             return NULL;
          }
-         peek_count++;
       }
       goto *return_address;
 
-      comm:
-      stat_cursor += peek_count + 1;
-      // this should never be the case
-      if (stat_cursor[0] == '(') {
-         stat_cursor++;
-      } else {
+      // nothing here is run
+
+      // 02 comm
+      comm: {
+         if (stat_cursor[0] == '(') {
+            stat_cursor++;
+         } else {
+            // this should never be the case
+            goto die_statfd;
+         }
+
+         size_t comm_len = 0;
+         while (stat_cursor[comm_len] != ')') comm_len++;
+
+         // (init)
+         //  ^   ^
+         //  ^   stat_cursor + comm_len
+         //  stat_cursor
+
+         if (napi_create_string_utf8(env, stat_cursor, comm_len, &name) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "name", name) != napi_ok) {
+            goto die_statfd;
+         }
+
+         stat_cursor += comm_len + LEN(") ");
+      }
+
+      // 03 status
+      if (napi_create_string_utf8(env, stat_cursor, 1, &status) != napi_ok) {
          goto die_statfd;
       }
 
-      delim = ')';
-      return_address = &&comm_end;
-      goto peek;
-
-      comm_end:
-      if (napi_create_string_utf8(env, stat_cursor, peek_count, &name) != napi_ok) {
+      if (napi_set_named_property(env, obj, "status", status) != napi_ok) {
          goto die_statfd;
       }
 
-      if (napi_set_named_property(env, obj, "name", name) != napi_ok) {
-         goto die_statfd;
+      // (init) S 1
+      //        ^
+      //        stat_cursor
+
+      // increment twice to land on ppid
+      stat_cursor += 2;
+
+      // 04 ppid
+      {
+         uint32_t ppid = 0;
+         while (*stat_cursor != ' ') {
+            // assumed: '0' <= *stat_cursor <= '9'
+            ppid *= 10;
+            ppid += *stat_cursor - '0';
+            stat_cursor++;
+         }
+
+         if (napi_create_uint32(env, ppid, &ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "ppid", ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
+      }
+
+      stat_cursor++;
+
+      // 05 pgrp
+      // 06 session
+      // 07 tty_nr
+      // 08 tpgid
+      // 09 flags
+      // 10 minflt
+      // 11 cminflt
+      // 12 majflt
+      // 13 cmajflt
+      // 14 utime
+      // 15 stime
+      // 16 cutime
+      // 17 cstime
+      {
+         size_t words_to_skip = 13;
+         pgrp_to_cstime:
+         return_address = &&pgrp_to_cstime;
+         // FIXME: extra compare for no reason
+         while (words_to_skip --> 0) goto next_word;
+      }
+
+      // 18 priority
+      {
+         int32_t priority = 0;
+         while (*stat_cursor != ' ') {
+            // assumed: '0' <= *stat_cursor <= '9'
+            priority *= 10;
+            priority += *stat_cursor - '0';
+            stat_cursor++;
+         }
+
+         if (napi_create_int32(env, priority, &ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "priority", ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
+      }
+
+      // cursor is currently on space
+      stat_cursor++;
+
+      // 19 nice
+      return_address = &&num_threads;
+      goto next_word;
+
+      // 20 num_threads
+      num_threads: {
+         int32_t threads = 0;
+         while (*stat_cursor != ' ') {
+            // assumed: '0' <= *stat_cursor <= '9'
+            threads *= 10;
+            threads += *stat_cursor - '0';
+            stat_cursor++;
+         }
+
+         if (napi_create_int32(env, threads, &ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
+
+         if (napi_set_named_property(env, obj, "threads", ppid_n) != napi_ok) {
+            goto die_statfd;
+         }
       }
 
       char exe_path[PATH_MAX];
