@@ -1,18 +1,22 @@
-#include "lib.h"
-
+#include "js_native_api.h"
+#include "ps_list.h"
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <tlhelp32.h>
 #include <psapi.h>
 
+#ifdef __clang__
 #pragma clang diagnostic ignored "-Wtautological-compare"
+#endif
 
-napi_value process_list(napi_env const restrict env, napi_callback_info const restrict info) {
+napi_value process_list(napi_env const env, napi_callback_info const info) {
    bool with_paths = false;
    {
       napi_value argv[1];
       size_t argc = sizeof(argv);
       napi_value this;
       void *data;
+
 
       napi_ok
       == napi_ok && napi_get_cb_info(env, info, &argc, argv, &this, &data)
@@ -21,15 +25,16 @@ napi_value process_list(napi_env const restrict env, napi_callback_info const re
    }
 
    napi_value ary;
+   
    if (napi_create_array(env, &ary) != napi_ok) {
-      napi_throw_error(env, "ENOCREATE", "Could not make output array!");
+      napi_throw_error(env, "NOCREATE", "Could not make output array!");
       return NULL;
    }
 
    HANDLE const snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS | TH32CS_SNAPMODULE, 0);
 
    if (snap == INVALID_HANDLE_VALUE) {
-      napi_throw_error(env, "ENOTH32SNAP", "Snapshot handle was invalid!");
+      napi_throw_error(env, "NOTH32SNAP", "Snapshot handle was invalid!");
       return NULL;
    }
 
